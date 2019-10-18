@@ -51,7 +51,7 @@ setup(
     description="convert csv into video annotation",
     entry_points={
         'console_scripts': [
-            '{}={}.cli:main'.format(project_name, project_name),
+            '{}={}.cli:cli'.format(project_name, project_name),
         ],
     },
     include_package_data=True,
