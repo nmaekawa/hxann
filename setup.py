@@ -28,6 +28,7 @@ with open('README.rst') as readme_file:
 
 requirements = [
     'Click>=6.0',
+    'python-dateutil>=2.8.0',
 ]
 
 test_requirements = [
