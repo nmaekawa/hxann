@@ -20,10 +20,8 @@ from .hxann import convert
 def cli(csv, fmt):
 
     with _smart_open(csv) as handle:
-        #content = handle.read()
-        result = convert(handle)
+        result = convert(handle, fmt=fmt)
 
-    #result = convert(content)
     print(result)
 
 

@@ -8,6 +8,12 @@ from dateutil import tz
 import json
 import re
 
+
+# catchpy webannotation
+CATCH_CURRENT_SCHEMA_VERSION = '1.1.0'
+CATCH_DEFAULT_PLATFORM_NAME = 'edX'
+CATCH_JSONLD_CONTEXT_IRI = 'http://catchpy.harvardx.harvard.edu.s3.amazonaws.com/jsonld/catch_context_jsonld.json'
+
 # csv headers
 START = 'Start Time'
 END = 'End Time'
@@ -18,9 +24,6 @@ TAGS = 'Tags'
 time_regex = re.compile(
     r'^(?:(?:(\d?\d):)??(?:(\d?\d):)??)(\d?\d)$'
 )
-
-# all entries get the same created and updated timestamp
-datetime_now= datetime.now(tz.tzutc()).replace(microsecond=0).isoformat()
 
 annjs_template = {
     'archived': False,
@@ -47,12 +50,70 @@ annjs_template = {
     },
     'totalComments': 0,
     'updated': None,
-    'uri': 123
+    'uri': 123,
     'user': {
         'id': 'admin',
         'name': 'admin',
     }
 }
+
+webann_template = {
+    '@context': CATCH_JSONLD_CONTEXT_IRI,
+    'id': '1',
+    'type': 'Annotation',
+    'schema_version': CATCH_CURRENT_SCHEMA_VERSION,
+    'created': None,
+    'modified': None,
+    'creator': {
+        'id': 'admin',
+        'name': 'admin'
+    },
+    'permissions': {
+        'can_read': [],
+        'can_update': ['admin'],
+        'can_delete': ['admin'],
+        'can_admin': ['admin'],
+    },
+    'platform': {
+        'platform_name': CATCH_DEFAULT_PLATFORM_NAME,
+        'context_id': 'None',
+        'collection_id': 'None',
+        'target_source_id': '123',
+    },
+    'body': {
+        'type': 'List',
+        'items': [{
+            'type': 'TextualBody',
+            'purpose': 'commenting',
+            'value': ''
+        }],
+    },
+    'target': {
+        'type': 'List',
+        'items': [{
+            'type': 'Video',
+            'format': 'video/youtube',
+            'source': "https://www.youtube.com/watch?v=fake",
+            'selector': {
+                'type': 'List',
+                'items': [{
+                    'type': 'FragmentSelector',
+                    'conformsTo': 'http://www.w3.org/TR/media-frags/',
+                    'value': 't=0,1',
+                    'refinedBy': [{
+                        'type': 'CssSelector',
+                        'value': '#vid1',
+                    }],
+                }]
+            }
+        }],
+    }
+}
+
+
+class HxannError(Exception):
+    pass
+
 
 def time_in_secs(time_as_string):
     matches = time_regex.findall(time_as_string)
@@ -60,29 +121,41 @@ def time_in_secs(time_as_string):
         seconds = sum([
             a*b for a,b in zip(
                 [3600, 60, 1],
-                map(lambda x: int(x) if x is not None else 0, matches[0])
+                map(lambda x: int(x) if x and x.isdigit() else 0, matches[0])
             )
         ])
         return seconds
     else:
-        return None  # maybe raise exception for parsing error
+        return None
 
 
-def convert(csv_input):
-    reader = csv.DictReader(csv_input, delimiter=',')
-    result = []
-    for row in reader:
-        result.append(row)
+def convert(csv_input, fmt='webann'):
+    reader = csv.DictReader(csv_input, delimiter=',', quotechar='"')
+    anns = []
+    index = 1
+    for record in reader:
+        index += 1  # record 1 is the csv header
+        record['id'] = index
+        translated = translate_record(record, fmt=fmt)
+        anns.append(translated)
 
-    return json.dumps(result, indent=4, sort_keys=True)
+    search_result = {
+        'limit': '-1',
+        'offset': '0',
+        'rows': anns,
+        'size': len(anns),
+        'total': len(anns),
+    }
+    return json.dumps(search_result, indent=4, sort_keys=True)
 
 
-def translate_record(record, fmt='annjs'):
+def translate_record(record, fmt):
     # record is a dict that corresponds to a row from input csv file.
 
     # checks required keys
     if START not in record or END not in record:
-        return None
+        raise HxannError(
+            'missing start or end times in row({})'.format(record))
 
     # if start time blank, set to 00
     if not record[START]:
@@ -94,30 +167,50 @@ def translate_record(record, fmt='annjs'):
             record[START] = start
             record[END] = end
 
-            start = time_in_secs(record[START])
-            if start is None:
-                return None
-            else:
-                record[START] = start
+        start = time_in_secs(record[START])
+        if start is None:
+            raise HxannError(
+                'malformed start time({}) in row({})'.format(
+                    record[START], record['id']))
+        else:
+            record[START] = start
 
     # if end time blank, assumes same as start
     if not record[END]:
         record[END] = record[START]
     else:
         end = time_in_secs(record[END])
-        if end is None or end > record[START]:
-            return None
+        if end is None:
+            raise HxannError(
+                'malformed end time({}) in row({})'.format(
+                    record[END], record['id']))
+        if end < record[START]:
+            raise HxannError(
+                'end time({}) before start time({}) in row({})'.format(
+                record[END], record[START], record['id']))
         else:
             record[END] = end
 
-
-    if TAGS in record:
-        pass
+    if TAGS not in record:
+        record[TAGS] = []
     else:
-        record[TAGS] = ''
+        if record[TAGS]:
+            tags = [x.strip() for x in record[TAGS].split(',')]
+            record[TAGS] = tags
+        else:
+            record[TAGS] = []
 
     if ANN not in record:
         record[ANN] = ''
+
+    datetime_now= datetime.now(tz.tzutc()).replace(microsecond=0).isoformat()
+    record['created'] = datetime_now
+    record['updated'] = datetime_now
+
+    if fmt == 'annjs':
+        return annjs_record(record)
+    else:
+        return webann_record(record)
 
 
 def annjs_record(record):
@@ -126,111 +219,28 @@ def annjs_record(record):
     result['created'] = record['created']
     result['rangeTime'] = {'start': record[START], 'end': record[END]}
     result['tags'] = record[TAGS]
-    result['text'] = record['text']
+    result['text'] = record[ANN]
     result['updated'] = record['updated']
     return result
 
+def webann_record(record):
+    result = webann_template.copy()
+    result['id'] = record['id']
+    result['created'] = record['created']
+    result['body']['items'][0]['value'] = record[ANN]
+    result['modified'] = record['updated']
+    if record[TAGS]:
+        for t in record[TAGS]:
+            result['body']['items'].append({
+                'type': 'TextualBody',
+                'purpose': 'tagging',
+                'value': t
+            })
+    result['target']['items'][0]['selector']['items'][0]['value'] = \
+            't={},{}'.format(record[START], record[END])
+    return result
 
 
-def convert2(csv_input):
-    csv_reader = csv.reader(csv_input, delimiter=',', quotechar='"')
-    index = 0
-    annotations = []
-    csv_reader.__next__()
-    complete_tags = set([])
-    for row in csv_reader:
-        annotation = {
-            'archived': False,
-            'citation': "None",
-            'collectionId': 'None',
-            'contextId': 'None',
-            'created': datetime.now().isoformat(),
-            'deleted': False,
-            'id': index,
-            'media': "video",
-            'parent': "0",
-            'permissions': {
-                "update": ['admin'],
-                'admin': ['admin'],
-                'read': [],
-                'delete': ['admin'],
-            },
-            'quote': '',
-            'ranges': [],
-            'totalComments': 0,
-            'updated': datetime.now().isoformat(),
-            'user': {
-                'id': 'fakeid',
-                'name': 'Course',
-            }
-        }
-        index = index + 1
-
-        # if start time blank, set to 00
-        if not row[0].strip():
-            row[0] = '0'
-
-        # range in start time, split and ignore end time
-        if '-' in row[0]:
-            start, end = row[0].split('-')
-            row[0] = start
-            row[1] = end
-        if not row[1].strip():
-            row[1] = row[0]
-
-
-        def time_in_secs(time):
-            total = 0
-            if ':' in time:
-                sects = time.split(':')
-                start_time = 1
-                while len(sects) > 0:
-                    curr = sects.pop()
-                    total += float(curr) * start_time
-                    start_time *= 60
-            elif 's' in time or 'm' in time or 'h' in time:
-                found = re.search('([0-9])+?( )?[s]', time)
-                if found:
-                    total += float(found.group(1))
-                found = re.search('([0-9])+?( )?[m]', time)
-                if found:
-                    total += float(found.group(1)) * 60.0
-                found = re.search('([0-9])+?( )?[h]', time)
-                if found:
-                    total += float(found.group(1)) * 60.0 * 60.0
-            else:
-                try:
-                    total = float(time)
-                except ValueError as e:
-                    print('error for ({}|{}): {}'.format(index, time, e))
-                    print('--- {}'.format(row))
-                except Error as e:
-                    raise(e)
-            return total
-        range_start = time_in_secs(row[0])
-        range_end = time_in_secs(row[1])
-        tags = row[2]
-        text = row[3]
-        source = row[4]
-        ext = row[5]
-        complete_tags.add(tags + ":yellow")
-        annotation.update({'rangeTime': {'start': float(range_start), 'end': float(range_end)}})
-        annotation.update({'text': text})
-        annotation.update({'tags': tags.split(' ')})
-        annotation.update({'uri': source})
-        annotation.update({'target': {'container': "vid1", "src": source, "ext": ext}})
-        annotations.append(annotation)
-
-
-    json_data = {
-        "limit": "-1",
-        "offset": "0",
-        "rows": annotations,
-        "size": len(annotations),
-        "total": len(annotations),
-    }
-
-    return json.dumps(json_data, indent=4, sort_keys=True)
 
 
 
