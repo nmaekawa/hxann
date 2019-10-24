@@ -7,7 +7,8 @@ from setuptools import setup
 from setuptools import find_packages
 
 
-project_name='hxann'
+project_name = 'hxann'
+
 
 def get_version(*file_paths):
     """Retrieves the version from [your_package]/__init__.py"""
