@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 """convert csv file into catchpy webannotation json format"""
-
+import copy
 import csv
 from datetime import datetime
 from dateutil import tz
@@ -214,7 +214,7 @@ def translate_record(record, fmt):
 
 
 def annjs_record(record):
-    result = annjs_template.copy()
+    result = copy.deepcopy(annjs_template)
     result['id'] = record['id']
     result['created'] = record['created']
     result['rangeTime'] = {'start': record[START], 'end': record[END]}
@@ -224,7 +224,7 @@ def annjs_record(record):
     return result
 
 def webann_record(record):
-    result = webann_template.copy()
+    result = copy.deepcopy(webann_template)
     result['id'] = record['id']
     result['created'] = record['created']
     result['body']['items'][0]['value'] = record[ANN]
