@@ -4,6 +4,7 @@
 import copy
 import csv
 import json
+import mimetypes
 import re
 from datetime import datetime
 from dateutil import tz
@@ -19,6 +20,7 @@ START = 'Start Time'
 END = 'End Time'
 ANN = 'Annotation Text'
 TAGS = 'Tags'
+SOURCE = 'Video Link'
 
 # regex to match a video timestamp in the format "hh:mm:ss"
 TIME_REGEX = re.compile(
@@ -44,7 +46,7 @@ ANNJS_TEMPLATE = {
     'quote': '',
     'ranges': [],
     'target': {
-        "container": "vid1",
+        "container": "video1",
         "ext": "Youtube",
         "src": "https://www.youtube.com/watch?v=fake"
     },
@@ -102,7 +104,7 @@ WEBANN_TEMPLATE = {
                     'value': 't=0,1',
                     'refinedBy': [{
                         'type': 'CssSelector',
-                        'value': '#vid1',
+                        'value': '#video1',
                     }],
                 }]
             }
@@ -156,6 +158,16 @@ def translate_record(record, fmt):
     if START not in record or END not in record:
         raise HxannError(
             'missing start or end times in row({})'.format(record))
+    if SOURCE not in record:
+        raise HxannError(
+            'missing video link in row({})'.format(record))
+
+    # validate mimetype
+    mimetype, _ = mimetypes.guess_type(record[SOURCE])
+    if mimetype is None:
+        raise HxannError(
+            'unknown video mimetype for link({})'.format(record[SOURCE]))
+    record['mimetype'] = mimetype
 
     # if start time blank, set to 00
     if not record[START]:
@@ -221,6 +233,8 @@ def annjs_record(record):
     result['tags'] = record[TAGS]
     result['text'] = record[ANN]
     result['updated'] = record['updated']
+    _, result['target']['ext'] = record['mimetype'].split('/')
+    result['target']['src'] = record[SOURCE]
     return result
 
 
@@ -239,6 +253,8 @@ def webann_record(record):
             })
     result['target']['items'][0]['selector']['items'][0]['value'] = \
             't={},{}'.format(record[START], record[END])
+    result['target']['items'][0]['format'] = record['mimetype']
+    result['target']['items'][0]['source'] = record[SOURCE]
     return result
 
 
