@@ -4,4 +4,4 @@
 
 __author__ = """nmaekawa"""
 __email__ = 'nmaekawa@g.harvard.edu'
-__version__ = '1.0.0'
+__version__ = '1.1.0'  # ignore empty records in csv input

@@ -139,7 +139,8 @@ def convert(csv_input, fmt='webann'):
         index += 1  # record 1 is the csv header
         record['id'] = index
         translated = translate_record(record, fmt=fmt)
-        anns.append(translated)
+        if translated is not None:  # skip empty records
+            anns.append(translated)
 
     search_result = {
         'limit': '-1',
@@ -162,11 +163,16 @@ def translate_record(record, fmt):
         raise HxannError(
             'missing video link in row({})'.format(record))
 
+    # check if required keys have a value
+    if (not record[START].strip() and not record[END].strip() and not \
+            record[SOURCE].strip()):
+        return None  # record is considered empty
+
     # validate mimetype
     mimetype, _ = mimetypes.guess_type(record[SOURCE])
     if mimetype is None:
         raise HxannError(
-            'unknown video mimetype for link({})'.format(record[SOURCE]))
+            'unknown video mimetype for link({})'.format(record))
     record['mimetype'] = mimetype
 
     # if start time blank, set to 00
