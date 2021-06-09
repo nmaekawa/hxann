@@ -1,6 +1,6 @@
 -r ./prod.txt
 
-pip==18.1
+pip==19.2
 flake8==3.5.0
 tox==3.5.2
 
