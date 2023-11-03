@@ -6,9 +6,7 @@ import csv
 import json
 import mimetypes
 import re
-from datetime import datetime
-from dateutil import tz
-
+from datetime import datetime, timezone
 
 # catchpy webannotation
 CATCH_CURRENT_SCHEMA_VERSION = '1.1.0'
@@ -221,7 +219,7 @@ def translate_record(record, fmt):
     if ANN not in record:
         record[ANN] = ''
 
-    datetime_now = datetime.now(tz.tzutc()).replace(microsecond=0).isoformat()
+    datetime_now = datetime.now(tz=timezone.utc).replace(microsecond=0).isoformat()
     record['created'] = datetime_now
     record['updated'] = datetime_now
 

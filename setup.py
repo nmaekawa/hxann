@@ -3,9 +3,8 @@
 
 import os
 import re
-from setuptools import setup
-from setuptools import find_packages
 
+from setuptools import find_packages, setup
 
 project_name = 'hxann'
 
@@ -28,8 +27,7 @@ with open('README.rst') as readme_file:
     readme = readme_file.read()
 
 requirements = [
-    'Click>=6.0',
-    'python-dateutil>=2.8.0',
+    'Click',
 ]
 
 test_requirements = [
