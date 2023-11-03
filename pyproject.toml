@@ -1,0 +1,18 @@
+
+[tool.isort]
+profile = 'black'
+skip = ["migrations"]
+
+[tool.black]
+target-version = ['py310']
+exclude = '''
+/(
+        \.eggs
+      | \.git
+      | \.tox
+      | \.venv
+      | build
+      | dist
+      | migrations
+)/
+'''
